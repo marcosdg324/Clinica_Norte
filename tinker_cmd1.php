@@ -1,0 +1,13 @@
+use App\Models\User;
+use App\Domains\Auth\Models\Role;
+use App\Domains\Auth\Models\Permission;
+echo 'Users: ' . User::count() . PHP_EOL;
+echo 'Roles: ' . Role::count() . PHP_EOL;
+echo 'Permissions: ' . Permission::count() . PHP_EOL;
+$admin = User::where('email','admin@clinicanorte.com')->first();
+echo 'Admin exists: ' . ($admin ? 'YES' : 'NO') . PHP_EOL;
+echo 'Admin roles: ' . $admin->getRoleNames()->implode(', ') . PHP_EOL;
+echo 'Admin can users.viewAny: ' . ($admin->can('users.viewAny') ? 'YES' : 'NO') . PHP_EOL;
+echo 'Admin can roles.viewAny: ' . ($admin->can('roles.viewAny') ? 'YES' : 'NO') . PHP_EOL;
+echo 'Admin can permissions.viewAny: ' . ($admin->can('permissions.viewAny') ? 'YES' : 'NO') . PHP_EOL;
+echo 'Admin canAccessPanel: ' . ($admin->canAccessPanel(app(\Filament\Panel::class)) ? 'YES' : 'NO') . PHP_EOL;
