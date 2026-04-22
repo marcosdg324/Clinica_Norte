@@ -45,9 +45,9 @@ trait HasModulePermissions
                 'prefixes' => ['patients'],
             ],
             'orders' => [
-                'label'    => 'Órdenes',
+                'label'    => 'Órdenes y Exámenes',
                 'icon'     => 'heroicon-o-clipboard-document-list',
-                'prefixes' => ['orders'],
+                'prefixes' => ['orders', 'exams'],
             ],
             'samples' => [
                 'label'    => 'Muestras',
@@ -147,14 +147,60 @@ trait HasModulePermissions
     }
 
     /**
-     * Sincroniza los permisos granulares del model según los toggles activos.
-     * Toggle ON  → asigna los 5 permisos del módulo (sin tocar los ya existentes de otros módulos).
-     * Toggle OFF → quita los permisos del módulo.
+     * Determina qué permisos corresponden al módulo 'orders' según el rol del model.
      *
-     * Usa givePermissionTo / revokePermissionTo para no pisar permisos de otros módulos.
-     *
-     * @param \Illuminate\Database\Eloquent\Model $record  Role o User
+     * Recepcionista → orders.* + exams.viewAny
+     * Bioquímico    → exams.*  + orders.viewAny
+     * Administrador → orders.* + exams.*
+     * default       → orders.* + exams.*
      */
+    protected static function resolveOrdersModulePermissions(mixed $record): array
+    {
+        // Detectar rol: si es un User tomamos su primer rol; si es un Role tomamos su name
+        $roleName = null;
+
+        if ($record instanceof \App\Models\User) {
+            $roleName = $record->roles->first()?->name;
+        } elseif (method_exists($record, 'name') && $record instanceof \Spatie\Permission\Models\Role) {
+            $roleName = $record->name;
+        }
+
+        $ordersAll = ['orders.viewAny', 'orders.view', 'orders.create', 'orders.update', 'orders.delete'];
+        $examsAll  = ['exams.viewAny',  'exams.view',  'exams.create',  'exams.update',  'exams.delete'];
+
+        return match ($roleName) {
+            'Recepcionista' => array_merge($ordersAll, ['exams.viewAny']),
+            'Bioquímico'    => array_merge($examsAll,  ['orders.viewAny', 'orders.view']),
+            default         => array_merge($ordersAll, $examsAll), // Administrador y resto: todo
+        };
+    }
+
+    /**
+     * Determina qué permisos corresponden al módulo 'samples' según el rol del model.
+     *
+     * Recepcionista → samples.viewAny + samples.view + samples.create
+     * Bioquímico    → samples.* (procesa muestras)
+     * Administrador → samples.*
+     * default       → samples.*
+     */
+    protected static function resolveSamplesModulePermissions(mixed $record): array
+    {
+        $roleName = null;
+
+        if ($record instanceof \App\Models\User) {
+            $roleName = $record->roles->first()?->name;
+        } elseif (method_exists($record, 'name') && $record instanceof \Spatie\Permission\Models\Role) {
+            $roleName = $record->name;
+        }
+
+        $samplesAll = ['samples.viewAny', 'samples.view', 'samples.create', 'samples.update', 'samples.delete'];
+
+        return match ($roleName) {
+            'Recepcionista' => ['samples.viewAny', 'samples.view', 'samples.create'],
+            default         => $samplesAll, // Bioquímico, Administrador y resto: todo
+        };
+    }
+
     protected function syncModulePermissions(mixed $record): void
     {
         $formState = $this->data;
@@ -163,14 +209,30 @@ trait HasModulePermissions
         $toRevoke = [];
 
         foreach (array_keys(static::moduleDefinitions()) as $moduleKey) {
-            $names = static::modulePermissionNames($moduleKey);
+            $allNames = static::modulePermissionNames($moduleKey);
 
             if ($formState["module_{$moduleKey}"] ?? false) {
-                $toGive = array_merge($toGive, $names);
+                // Para los módulos 'orders' y 'samples', aplicar permisos según el rol del model
+                if ($moduleKey === 'orders') {
+                    $roleAware = static::resolveOrdersModulePermissions($record);
+                    $toGive    = array_merge($toGive, $roleAware);
+                    // Revocar lo que está en el set completo pero NO en el set role-aware
+                    $toRevoke  = array_merge($toRevoke, array_diff($allNames, $roleAware));
+                } elseif ($moduleKey === 'samples') {
+                    $roleAware = static::resolveSamplesModulePermissions($record);
+                    $toGive    = array_merge($toGive, $roleAware);
+                    $toRevoke  = array_merge($toRevoke, array_diff($allNames, $roleAware));
+                } else {
+                    $toGive = array_merge($toGive, $allNames);
+                }
             } else {
-                $toRevoke = array_merge($toRevoke, $names);
+                $toRevoke = array_merge($toRevoke, $allNames);
             }
         }
+
+        // Evitar que algo en $toGive esté también en $toRevoke
+        $toGive   = array_unique($toGive);
+        $toRevoke = array_unique(array_diff($toRevoke, $toGive));
 
         if (!empty($toGive)) {
             $record->givePermissionTo(

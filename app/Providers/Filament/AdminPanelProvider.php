@@ -42,6 +42,16 @@ class AdminPanelProvider extends PanelProvider
                 in: app_path('Domains/Patients/Filament/Resources'),
                 for: 'App\\Domains\\Patients\\Filament\\Resources'
             )
+            // Recursos del dominio Orders (Módulo 3)
+            ->discoverResources(
+                in: app_path('Domains/Orders/Filament/Resources'),
+                for: 'App\\Domains\\Orders\\Filament\\Resources'
+            )
+            // Recursos del dominio Samples (Módulo 4)
+            ->discoverResources(
+                in: app_path('Domains/Samples/Filament/Resources'),
+                for: 'App\\Domains\\Samples\\Filament\\Resources'
+            )
             // Recursos generales (para módulos futuros)
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')

@@ -48,8 +48,6 @@ class Patient extends Model
      */
     public function orders(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        // Cuando se implemente el módulo de órdenes se descomenta:
-        // return $this->hasMany(\App\Domains\Orders\Models\Order::class, 'patient_id');
-        return $this->hasMany(self::class, 'id', 'id')->whereRaw('1=0'); // placeholder vacío
+        return $this->hasMany(\App\Domains\Orders\Models\Order::class, 'patient_id');
     }
 }
