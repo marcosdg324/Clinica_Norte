@@ -3,6 +3,7 @@
 namespace App\Domains\Auth\Filament\Resources\UserResource\Pages;
 
 use App\Domains\Auth\Filament\Resources\UserResource;
+use App\Domains\Auth\Models\Role;
 use App\Domains\Auth\Traits\HasModulePermissions;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -18,11 +19,18 @@ class CreateUser extends CreateRecord
     }
 
     /**
-     * Tras crear el usuario, asigna los permisos directos
+     * Tras crear el usuario, asigna el rol seleccionado y los permisos directos
      * correspondientes a los módulos activados en el formulario.
      */
     protected function afterCreate(): void
     {
+        $roleId = $this->data['role_id'] ?? null;
+        if ($roleId) {
+            $role = Role::find($roleId);
+            if ($role) {
+                $this->getRecord()->syncRoles([$role]);
+            }
+        }
         $this->syncModulePermissions($this->getRecord());
     }
 }

@@ -5,8 +5,6 @@ namespace App\Domains\Orders\Filament\Resources\OrderResource\Pages;
 use App\Domains\Orders\Filament\Resources\OrderResource;
 use App\Domains\Orders\Models\Order;
 use Filament\Actions;
-use Filament\Infolists\Components\BadgeEntry;
-use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
@@ -19,14 +17,16 @@ class ViewOrder extends ViewRecord
 
     protected function resolveRecord(int|string $key): Order
     {
-        return Order::with(['patient', 'receptionist', 'exams.requirements'])->findOrFail($key);
+        return Order::with(['patient', 'receptionist', 'responsibleUser', 'equipment', 'exams.requirements'])->findOrFail($key);
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\EditAction::make(),
-            Actions\DeleteAction::make(),
+            Actions\EditAction::make()
+                ->visible(fn () => OrderResource::canEdit($this->record)),
+            Actions\DeleteAction::make()
+                ->visible(fn () => OrderResource::canDelete($this->record)),
         ];
     }
 
@@ -44,39 +44,54 @@ class ViewOrder extends ViewRecord
                         ->badge()
                         ->color('gray'),
 
+                    TextEntry::make('type')
+                        ->label('Tipo de orden')
+                        ->badge()
+                        ->formatStateUsing(fn (string $state) => match ($state) {
+                            'laboratorio' => 'Laboratorio',
+                            'imagen' => 'Imagen',
+                            default => ucfirst($state),
+                        })
+                        ->color(fn (string $state) => match ($state) {
+                            'laboratorio' => 'primary',
+                            'imagen' => 'success',
+                            default => 'gray',
+                        }),
+
                     TextEntry::make('status')
                         ->label('Estado')
                         ->badge()
                         ->formatStateUsing(fn (string $state) => match ($state) {
-                            'pendiente'  => 'Pendiente',
+                            'pendiente' => 'Pendiente',
                             'en_proceso' => 'En proceso',
-                            'completado' => 'Completado',
-                            'cancelado'  => 'Cancelado',
-                            default      => ucfirst($state),
+                            'completada' => 'Completada',
+                            'cancelada' => 'Cancelada',
+                            default => ucfirst($state),
                         })
                         ->color(fn (string $state) => match ($state) {
-                            'pendiente'  => 'warning',
+                            'pendiente' => 'warning',
                             'en_proceso' => 'info',
-                            'completado' => 'success',
-                            'cancelado'  => 'danger',
-                            default      => 'gray',
+                            'completada' => 'success',
+                            'cancelada' => 'danger',
+                            default => 'gray',
                         }),
 
                     TextEntry::make('patient.first_name')
                         ->label('Paciente')
-                        ->formatStateUsing(fn ($state, $record) =>
-                            $record->patient?->first_name . ' ' . $record->patient?->last_name .
-                            ' — CI: ' . $record->patient?->ci
+                        ->formatStateUsing(fn ($state, $record) => $record->patient?->first_name.' '.$record->patient?->last_name.
+                            ' — CI: '.$record->patient?->ci
                         ),
 
                     TextEntry::make('receptionist.name')
                         ->label('Recepcionista'),
 
-                    IconEntry::make('is_urgent')
-                        ->label('¿Urgente?')
-                        ->boolean()
-                        ->trueColor('danger')
-                        ->falseColor('gray'),
+                    TextEntry::make('responsibleUser.name')
+                        ->label(fn (): string => $this->record->type === 'imagen'
+                            ? 'Tecnólogo de imagen asignado'
+                            : 'Bioquímico asignado')
+                        ->badge()
+                        ->color('info')
+                        ->placeholder('Sin asignar'),
 
                     TextEntry::make('scheduled_date')
                         ->label('Fecha programada')
@@ -87,6 +102,13 @@ class ViewOrder extends ViewRecord
                         ->label('Hora programada')
                         ->time('H:i')
                         ->placeholder('—'),
+
+                    TextEntry::make('equipment.name')
+                        ->label('Equipo de imagen asignado')
+                        ->badge()
+                        ->color('warning')
+                        ->placeholder('Sin equipo asignado')
+                        ->visible(fn ($record) => $record->type === 'imagen'),
 
                     TextEntry::make('created_at')
                         ->label('Creada el')
@@ -108,23 +130,18 @@ class ViewOrder extends ViewRecord
                                 ->badge()
                                 ->formatStateUsing(fn (string $state) => match ($state) {
                                     'laboratorio' => 'Laboratorio',
-                                    'imagen'      => 'Imagen',
-                                    default       => ucfirst($state),
+                                    'imagen' => 'Imagen',
+                                    default => ucfirst($state),
                                 })
                                 ->color(fn (string $state) => match ($state) {
                                     'laboratorio' => 'info',
-                                    'imagen'      => 'success',
-                                    default       => 'gray',
+                                    'imagen' => 'success',
+                                    default => 'gray',
                                 }),
 
                             TextEntry::make('price')
                                 ->label('Precio')
                                 ->money('BOB'),
-
-                            IconEntry::make('is_urgent_possible')
-                                ->label('Urgencia posible')
-                                ->boolean()
-                                ->trueColor('warning'),
 
                             TextEntry::make('exam_requirements')
                                 ->label('Requisitos previos')

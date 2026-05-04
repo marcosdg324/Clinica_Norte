@@ -3,6 +3,7 @@
 namespace App\Domains\Auth\Filament\Resources\UserResource\Pages;
 
 use App\Domains\Auth\Filament\Resources\UserResource;
+use App\Domains\Auth\Models\Role;
 use App\Domains\Auth\Traits\HasModulePermissions;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
@@ -31,15 +32,23 @@ class EditUser extends EditRecord
      */
     protected function afterFill(): void
     {
+        $this->data['role_id'] = $this->getRecord()->roles->first()?->id;
         $this->fillModuleToggles($this->getRecord());
     }
 
     /**
-     * Tras guardar el usuario, sincroniza sus permisos directos
+     * Tras guardar el usuario, sincroniza el único rol asignado y sus permisos directos
      * según los toggles activos en el formulario.
      */
     protected function afterSave(): void
     {
+        $roleId = $this->data['role_id'] ?? null;
+        if ($roleId) {
+            $role = Role::find($roleId);
+            if ($role) {
+                $this->getRecord()->syncRoles([$role]);
+            }
+        }
         $this->syncModulePermissions($this->getRecord());
     }
 }

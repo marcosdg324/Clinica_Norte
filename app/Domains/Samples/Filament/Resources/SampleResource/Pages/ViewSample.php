@@ -6,6 +6,7 @@ use App\Domains\Samples\Filament\Resources\SampleResource;
 use App\Domains\Samples\Models\Sample;
 use App\Domains\Samples\Models\SampleStatusHistory;
 use Filament\Actions;
+use Filament\Forms\Components\Textarea;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
@@ -23,6 +24,7 @@ class ViewSample extends ViewRecord
             'order.patient',
             'exam',
             'collectedBy',
+            'bioquimicoAsignado',
             'statusHistories.changedBy',
         ])->findOrFail($key);
     }
@@ -30,60 +32,125 @@ class ViewSample extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            // Acción rápida: cambiar estado desde la vista
-            Actions\Action::make('change_status')
-                ->label('Cambiar estado')
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
-                ->visible(fn () => auth()->user()?->hasDirectPermission('samples.update') ?? false)
-                ->form([
-                    \Filament\Forms\Components\Select::make('new_status')
-                        ->label('Nuevo estado')
-                        ->required()
-                        ->options([
-                            'recibida'    => 'Recibida',
-                            'en_analisis' => 'En análisis',
-                            'procesada'   => 'Procesada',
-                            'rechazada'   => 'Rechazada',
-                        ])
-                        ->native(false),
-                    \Filament\Forms\Components\Textarea::make('change_notes')
-                        ->label('Notas del cambio')
-                        ->nullable()
-                        ->rows(2),
-                ])
-                ->action(function (array $data): void {
-                    $sample    = $this->record;
+            // ── Aceptar muestra (Bioquímico: recibida → en_analisis) ────────────
+            Actions\Action::make('aceptar_muestra')
+                ->label('Aceptar muestra')
+                ->icon('heroicon-o-beaker')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Aceptar muestra')
+                ->modalDescription('La muestra pasará a estado "En análisis" y quedará asignada a ti.')
+                ->visible(
+                    fn () => $this->record->status === 'recibida'
+                        && (auth()->user()?->hasDirectPermission('samples.approve') ?? false)
+                        && $this->record->order?->responsible_user_id === auth()->id()
+                )
+                ->action(function (): void {
+                    $sample = $this->record;
                     $oldStatus = $sample->status;
-                    $newStatus = $data['new_status'];
 
-                    $sample->update(['status' => $newStatus]);
-
-                    SampleStatusHistory::create([
-                        'sample_id'  => $sample->id,
-                        'old_status' => $oldStatus,
-                        'new_status' => $newStatus,
-                        'changed_by' => auth()->id(),
-                        'notes'      => $data['change_notes'] ?? null,
+                    $sample->update([
+                        'status' => 'en_analisis',
+                        'bioquimico_asignado_id' => auth()->id(),
                     ]);
 
-                    // Refrescar el record para que el infolist muestre el nuevo estado
-                    $this->record = Sample::with([
-                        'order.patient',
-                        'exam',
-                        'collectedBy',
-                        'statusHistories.changedBy',
-                    ])->findOrFail($sample->id);
+                    SampleStatusHistory::create([
+                        'sample_id' => $sample->id,
+                        'old_status' => $oldStatus,
+                        'new_status' => 'en_analisis',
+                        'changed_by' => auth()->id(),
+                        'notes' => 'Muestra aceptada por bioquímico.',
+                    ]);
+
+                    $this->record = Sample::with(['order.patient', 'exam', 'collectedBy', 'bioquimicoAsignado', 'statusHistories.changedBy'])->findOrFail($sample->id);
 
                     Notification::make()
-                        ->title('Estado actualizado')
-                        ->body("La muestra pasó de \"{$oldStatus}\" a \"{$newStatus}\".")
+                        ->title('Muestra aceptada')
+                        ->body('La muestra está ahora en análisis y asignada a ti.')
                         ->success()
                         ->send();
                 }),
 
-            Actions\EditAction::make(),
-            Actions\DeleteAction::make(),
+            // ── Procesar muestra (Bioquímico: en_analisis → procesada) ────────
+            Actions\Action::make('procesar_muestra')
+                ->label('Marcar procesada')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Marcar como procesada')
+                ->modalDescription('Confirma que la muestra fue analizada y los resultados están listos.')
+                ->visible(
+                    fn () => $this->record->status === 'en_analisis'
+                        && (auth()->user()?->hasDirectPermission('samples.approve') ?? false)
+                )
+                ->action(function (): void {
+                    $sample = $this->record;
+                    $oldStatus = $sample->status;
+
+                    $sample->update(['status' => 'procesada']);
+
+                    SampleStatusHistory::create([
+                        'sample_id' => $sample->id,
+                        'old_status' => $oldStatus,
+                        'new_status' => 'procesada',
+                        'changed_by' => auth()->id(),
+                        'notes' => 'Muestra marcada como procesada.',
+                    ]);
+
+                    $this->record = Sample::with(['order.patient', 'exam', 'collectedBy', 'bioquimicoAsignado', 'statusHistories.changedBy'])->findOrFail($sample->id);
+
+                    Notification::make()
+                        ->title('Muestra procesada')
+                        ->body('La muestra fue marcada como procesada exitosamente.')
+                        ->success()
+                        ->send();
+                }),
+
+            // ── Rechazar muestra ──────────────────────────────────────────────
+            Actions\Action::make('rechazar_muestra')
+                ->label('Rechazar muestra')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->visible(
+                    fn () => $this->record->status === 'en_analisis'
+                        && (auth()->user()?->hasDirectPermission('samples.access') ?? false)
+                        && (auth()->user()?->hasDirectPermission('samples.reject') ?? false)
+                )
+                ->form([
+                    Textarea::make('motivo_rechazo')
+                        ->label('Motivo de rechazo')
+                        ->required()
+                        ->rows(3)
+                        ->placeholder('Describe el motivo por el que se rechaza la muestra...'),
+                ])
+                ->action(function (array $data): void {
+                    $sample = $this->record;
+                    $oldStatus = $sample->status;
+
+                    $sample->update([
+                        'status' => 'rechazada',
+                        'motivo_rechazo' => $data['motivo_rechazo'],
+                    ]);
+
+                    SampleStatusHistory::create([
+                        'sample_id' => $sample->id,
+                        'old_status' => $oldStatus,
+                        'new_status' => 'rechazada',
+                        'changed_by' => auth()->id(),
+                        'notes' => 'Rechazada: '.$data['motivo_rechazo'],
+                    ]);
+
+                    $this->record = Sample::with(['order.patient', 'exam', 'collectedBy', 'bioquimicoAsignado', 'statusHistories.changedBy'])->findOrFail($sample->id);
+
+                    Notification::make()
+                        ->title('Muestra rechazada')
+                        ->body('La muestra fue rechazada y el motivo fue registrado.')
+                        ->danger()
+                        ->send();
+                }),
+
+            Actions\EditAction::make()
+                ->visible(fn () => ! (auth()->user()?->hasRole('Bioquímico') ?? false)),
         ];
     }
 
@@ -107,18 +174,18 @@ class ViewSample extends ViewRecord
                         ->label('Estado')
                         ->badge()
                         ->formatStateUsing(fn (string $state) => match ($state) {
-                            'recibida'    => 'Recibida',
+                            'recibida' => 'Recibida',
                             'en_analisis' => 'En análisis',
-                            'procesada'   => 'Procesada',
-                            'rechazada'   => 'Rechazada',
-                            default       => ucfirst($state),
+                            'procesada' => 'Procesada',
+                            'rechazada' => 'Rechazada',
+                            default => ucfirst($state),
                         })
                         ->color(fn (string $state) => match ($state) {
-                            'recibida'    => 'info',
+                            'recibida' => 'info',
                             'en_analisis' => 'warning',
-                            'procesada'   => 'success',
-                            'rechazada'   => 'danger',
-                            default       => 'gray',
+                            'procesada' => 'success',
+                            'rechazada' => 'danger',
+                            default => 'gray',
                         }),
                 ]),
 
@@ -135,7 +202,7 @@ class ViewSample extends ViewRecord
                     TextEntry::make('order.patient.first_name')
                         ->label('Paciente')
                         ->getStateUsing(fn (Sample $record) => $record->order?->patient
-                            ? $record->order->patient->first_name . ' ' . $record->order->patient->last_name
+                            ? $record->order->patient->first_name.' '.$record->order->patient->last_name
                             : '—'),
 
                     TextEntry::make('exam.name')
@@ -145,18 +212,18 @@ class ViewSample extends ViewRecord
                         ->label('Estado de la orden')
                         ->badge()
                         ->formatStateUsing(fn (string $state) => match ($state) {
-                            'pendiente'  => 'Pendiente',
+                            'pendiente' => 'Pendiente',
                             'en_proceso' => 'En proceso',
-                            'completado' => 'Completado',
-                            'cancelado'  => 'Cancelado',
-                            default      => ucfirst($state),
+                            'completada' => 'Completada',
+                            'cancelada' => 'Cancelada',
+                            default => ucfirst($state),
                         })
                         ->color(fn (string $state) => match ($state) {
-                            'pendiente'  => 'gray',
+                            'pendiente' => 'gray',
                             'en_proceso' => 'warning',
-                            'completado' => 'success',
-                            'cancelado'  => 'danger',
-                            default      => 'gray',
+                            'completada' => 'success',
+                            'cancelada' => 'danger',
+                            default => 'gray',
                         }),
                 ]),
 
@@ -183,6 +250,24 @@ class ViewSample extends ViewRecord
                         ->columnSpanFull(),
                 ]),
 
+            // ── Análisis / Bioquímico ────────────────────────────────────────
+            Section::make('Análisis')
+                ->icon('heroicon-o-user-group')
+                ->columns(2)
+                ->schema([
+                    TextEntry::make('bioquimicoAsignado.name')
+                        ->label('Bioquímico asignado')
+                        ->placeholder('Sin asignar')
+                        ->badge()
+                        ->color('info'),
+
+                    TextEntry::make('motivo_rechazo')
+                        ->label('Motivo de rechazo')
+                        ->placeholder('—')
+                        ->visible(fn (Sample $record) => $record->status === 'rechazada')
+                        ->columnSpanFull(),
+                ]),
+
             // ── Trazabilidad ────────────────────────────────────────────────
             Section::make('Trazabilidad — Historial de estados')
                 ->icon('heroicon-o-clock')
@@ -202,37 +287,37 @@ class ViewSample extends ViewRecord
                                 ->label('Estado anterior')
                                 ->badge()
                                 ->formatStateUsing(fn (?string $state) => match ($state) {
-                                    'recibida'    => 'Recibida',
+                                    'recibida' => 'Recibida',
                                     'en_analisis' => 'En análisis',
-                                    'procesada'   => 'Procesada',
-                                    'rechazada'   => 'Rechazada',
-                                    null          => '—',
-                                    default       => ucfirst($state),
+                                    'procesada' => 'Procesada',
+                                    'rechazada' => 'Rechazada',
+                                    null => '—',
+                                    default => ucfirst($state),
                                 })
                                 ->color(fn (?string $state) => match ($state) {
-                                    'recibida'    => 'info',
+                                    'recibida' => 'info',
                                     'en_analisis' => 'warning',
-                                    'procesada'   => 'success',
-                                    'rechazada'   => 'danger',
-                                    default       => 'gray',
+                                    'procesada' => 'success',
+                                    'rechazada' => 'danger',
+                                    default => 'gray',
                                 }),
 
                             TextEntry::make('new_status')
                                 ->label('Nuevo estado')
                                 ->badge()
                                 ->formatStateUsing(fn (string $state) => match ($state) {
-                                    'recibida'    => 'Recibida',
+                                    'recibida' => 'Recibida',
                                     'en_analisis' => 'En análisis',
-                                    'procesada'   => 'Procesada',
-                                    'rechazada'   => 'Rechazada',
-                                    default       => ucfirst($state),
+                                    'procesada' => 'Procesada',
+                                    'rechazada' => 'Rechazada',
+                                    default => ucfirst($state),
                                 })
                                 ->color(fn (string $state) => match ($state) {
-                                    'recibida'    => 'info',
+                                    'recibida' => 'info',
                                     'en_analisis' => 'warning',
-                                    'procesada'   => 'success',
-                                    'rechazada'   => 'danger',
-                                    default       => 'gray',
+                                    'procesada' => 'success',
+                                    'rechazada' => 'danger',
+                                    default => 'gray',
                                 }),
 
                             TextEntry::make('notes')

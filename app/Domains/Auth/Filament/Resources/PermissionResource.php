@@ -15,31 +15,35 @@ class PermissionResource extends Resource
     protected static ?string $model = Permission::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-key';
+
     protected static ?string $navigationGroup = 'Administración';
-    protected static ?int    $navigationSort  = 3;
-    protected static ?string $modelLabel         = 'Permiso';
-    protected static ?string $pluralModelLabel   = 'Permisos';
+
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $modelLabel = 'Permiso';
+
+    protected static ?string $pluralModelLabel = 'Permisos';
 
     // ─── Autorización ─────────────────────────────────────────────────────────
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasDirectPermission('permissions.viewAny') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return false;
+        return false; // Los permisos se crean solo via Seeder/Migraciones
     }
 
     public static function canEdit($record): bool
     {
-        return false;
+        return false; // Los permisos no se editan manualmente
     }
 
     public static function canDelete($record): bool
     {
-        return false;
+        return false; // Los permisos no se eliminan manualmente
     }
 
     // ─── Formulario ──────────────────────────────────────────────────────────
@@ -80,27 +84,28 @@ class PermissionResource extends Resource
                     ->sortable()
                     ->formatStateUsing(function (string $state): string {
                         $moduleMap = [
-                            'users'         => 'Usuarios',
-                            'roles'         => 'Roles',
-                            'permissions'   => 'Permisos',
-                            'patients'      => 'Pacientes',
-                            'orders'        => 'Órdenes',
-                            'samples'       => 'Muestras',
-                            'results'       => 'Resultados',
-                            'billing'       => 'Facturación',
-                            'inventory'     => 'Inventario',
+                            'users' => 'Usuarios',
+                            'roles' => 'Roles',
+                            'permissions' => 'Permisos',
+                            'patients' => 'Pacientes',
+                            'orders' => 'Órdenes',
+                            'samples' => 'Muestras',
+                            'results' => 'Resultados',
+                            'billing' => 'Facturación',
+                            'inventory' => 'Inventario',
                             'notifications' => 'Notificaciones',
                         ];
                         $actionMap = [
                             'viewAny' => 'Ver listado',
-                            'view'    => 'Ver detalle',
-                            'create'  => 'Crear',
-                            'update'  => 'Editar',
-                            'delete'  => 'Eliminar',
+                            'view' => 'Ver detalle',
+                            'create' => 'Crear',
+                            'update' => 'Editar',
+                            'delete' => 'Eliminar',
                         ];
                         [$mod, $action] = array_pad(explode('.', $state, 2), 2, '');
-                        $modLabel    = $moduleMap[$mod]    ?? ucfirst($mod);
+                        $modLabel = $moduleMap[$mod] ?? ucfirst($mod);
                         $actionLabel = $actionMap[$action] ?? ucfirst($action);
+
                         return "{$modLabel} → {$actionLabel}";
                     }),
 
@@ -108,17 +113,17 @@ class PermissionResource extends Resource
                     ->label('Módulo')
                     ->getStateUsing(fn ($record) => explode('.', $record->name)[0] ?? $record->name)
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'users'         => 'Usuarios',
-                        'roles'         => 'Roles',
-                        'permissions'   => 'Permisos',
-                        'patients'      => 'Pacientes',
-                        'orders'        => 'Órdenes',
-                        'samples'       => 'Muestras',
-                        'results'       => 'Resultados',
-                        'billing'       => 'Facturación',
-                        'inventory'     => 'Inventario',
+                        'users' => 'Usuarios',
+                        'roles' => 'Roles',
+                        'permissions' => 'Permisos',
+                        'patients' => 'Pacientes',
+                        'orders' => 'Órdenes',
+                        'samples' => 'Muestras',
+                        'results' => 'Resultados',
+                        'billing' => 'Facturación',
+                        'inventory' => 'Inventario',
                         'notifications' => 'Notificaciones',
-                        default         => ucfirst($state),
+                        default => ucfirst($state),
                     })
                     ->badge()
                     ->color('info'),
@@ -128,20 +133,20 @@ class PermissionResource extends Resource
                     ->getStateUsing(fn ($record) => explode('.', $record->name)[1] ?? '')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'viewAny' => 'Ver listado',
-                        'view'    => 'Ver detalle',
-                        'create'  => 'Crear',
-                        'update'  => 'Editar',
-                        'delete'  => 'Eliminar',
-                        default   => ucfirst($state),
+                        'view' => 'Ver detalle',
+                        'create' => 'Crear',
+                        'update' => 'Editar',
+                        'delete' => 'Eliminar',
+                        default => ucfirst($state),
                     })
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'viewAny' => 'gray',
-                        'view'    => 'info',
-                        'create'  => 'success',
-                        'update'  => 'warning',
-                        'delete'  => 'danger',
-                        default   => 'gray',
+                        'view' => 'info',
+                        'create' => 'success',
+                        'update' => 'warning',
+                        'delete' => 'danger',
+                        default => 'gray',
                     }),
 
                 Tables\Columns\TextColumn::make('roles_count')
@@ -161,20 +166,19 @@ class PermissionResource extends Resource
                 Tables\Filters\SelectFilter::make('module')
                     ->label('Módulo')
                     ->options([
-                        'users'         => 'Usuarios',
-                        'roles'         => 'Roles',
-                        'permissions'   => 'Permisos',
-                        'patients'      => 'Pacientes',
-                        'orders'        => 'Órdenes',
-                        'samples'       => 'Muestras',
-                        'results'       => 'Resultados',
-                        'billing'       => 'Facturación',
-                        'inventory'     => 'Inventario',
+                        'users' => 'Usuarios',
+                        'roles' => 'Roles',
+                        'permissions' => 'Permisos',
+                        'patients' => 'Pacientes',
+                        'orders' => 'Órdenes',
+                        'samples' => 'Muestras',
+                        'results' => 'Resultados',
+                        'billing' => 'Facturación',
+                        'inventory' => 'Inventario',
                         'notifications' => 'Notificaciones',
                     ])
-                    ->query(fn ($query, array $data) =>
-                        isset($data['value']) && $data['value']
-                            ? $query->where('name', 'like', $data['value'] . '.%')
+                    ->query(fn ($query, array $data) => isset($data['value']) && $data['value']
+                            ? $query->where('name', 'like', $data['value'].'.%')
                             : $query
                     ),
             ])

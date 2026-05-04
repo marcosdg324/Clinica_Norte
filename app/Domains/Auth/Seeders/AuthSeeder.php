@@ -12,101 +12,137 @@ use Spatie\Permission\PermissionRegistrar;
 class AuthSeeder extends Seeder
 {
     /**
-     * Módulos del sistema y sus acciones disponibles.
+     * Permisos de acceso por módulo (uno por módulo = acceso completo al módulo).
+     * El administrador puede asignar estos permisos directamente a cualquier usuario.
      */
-    private array $modules = [
-        'users',
-        'roles',
-        'permissions',
-        'patients',
-        'orders',
-        'samples',
-        'results',
-        'billing',
-        'inventory',
-        'notifications',
+    private array $modulePermissions = [
+        'auth.access',
+        'patients.access',
+        'orders.access',
+        'samples.access',
+        'results.access',
+        'payments.access',
+        'reactivos.access',
+        'notifications.access',
+        'catalog.access',
+        'imaging.access',
     ];
 
-    private array $actions = ['viewAny', 'view', 'create', 'update', 'delete'];
+    /**
+     * Permisos especiales para acciones específicas que no representan
+     * acceso completo a un módulo, sino operaciones puntuales.
+     */
+    private array $specialPermissions = [
+        'samples.approve',
+        'samples.reject',
+        'imaging.approve',
+    ];
 
     public function run(): void
     {
         // Limpiar caché de permisos antes de comenzar
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // ─── 1. CREAR TODOS LOS PERMISOS DEL SISTEMA ─────────────────────────
-        foreach ($this->modules as $module) {
-            foreach ($this->actions as $action) {
-                Permission::firstOrCreate([
-                    'name'       => "{$module}.{$action}",
-                    'guard_name' => 'web',
-                ]);
-            }
+        // ─── 1. CREAR PERMISOS DEL SISTEMA ───────────────────────────────────
+        foreach (array_merge($this->modulePermissions, $this->specialPermissions) as $perm) {
+            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
         }
 
-        // ─── 2. CREAR LOS 5 ROLES BASE ────────────────────────────────────────
-        $admin         = Role::firstOrCreate(['name' => 'Administrador',  'guard_name' => 'web']);
-        $recepcionista = Role::firstOrCreate(['name' => 'Recepcionista',  'guard_name' => 'web']);
-        $bioquimico    = Role::firstOrCreate(['name' => 'Bioquímico',     'guard_name' => 'web']);
-        $medico        = Role::firstOrCreate(['name' => 'Médico',         'guard_name' => 'web']);
-        $paciente      = Role::firstOrCreate(['name' => 'Paciente',       'guard_name' => 'web']);
+        // ─── 2. CREAR LOS ROLES BASE ───────────────────────────────────────────
+        $admin = Role::firstOrCreate(['name' => 'Administrador',        'guard_name' => 'web']);
+        $recepcionista = Role::firstOrCreate(['name' => 'Recepcionista',        'guard_name' => 'web']);
+        $bioquimico = Role::firstOrCreate(['name' => 'Bioquímico',           'guard_name' => 'web']);
+        $tecnologoImagen = Role::firstOrCreate(['name' => 'Tecnólogo de Imagen',  'guard_name' => 'web']);
+        $medico = Role::firstOrCreate(['name' => 'Médico',               'guard_name' => 'web']);
+        $paciente = Role::firstOrCreate(['name' => 'Paciente',             'guard_name' => 'web']);
 
         // ─── 3. ASIGNAR PERMISOS POR ROL ─────────────────────────────────────
 
-        // Administrador: TODOS los permisos del sistema
+        // Administrador: acceso completo a todos los módulos
         $admin->syncPermissions(Permission::all());
 
-        // Recepcionista: gestiona pacientes, órdenes, facturación y muestras (solo lectura)
+        // Recepcionista: pacientes, órdenes, pagos, muestras (registro), imagen (registro), notificaciones
         $recepcionista->syncPermissions(Permission::whereIn('name', [
-            'patients.viewAny', 'patients.view', 'patients.create', 'patients.update',
-            'orders.viewAny',   'orders.view',   'orders.create',   'orders.update',
-            'billing.viewAny',  'billing.view',  'billing.create',  'billing.update',
-            'samples.viewAny',  'samples.view',
-            'notifications.viewAny', 'notifications.view',
+            'patients.access',
+            'orders.access',
+            'payments.access',
+            'samples.access',
+            'imaging.access',
+            'notifications.access',
         ])->get());
 
-        // Bioquímico: gestiona muestras, resultados e inventario
+        // Bioquímico: laboratorio (muestras, resultados, reactivos, etc.).
+        // El módulo de imagen lo cubre el rol Tecnólogo de Imagen.
         $bioquimico->syncPermissions(Permission::whereIn('name', [
-            'samples.viewAny',   'samples.view',   'samples.create',   'samples.update',
-            'results.viewAny',   'results.view',   'results.create',   'results.update',
-            'inventory.viewAny', 'inventory.view', 'inventory.create', 'inventory.update',
-            'patients.viewAny',  'patients.view',
-            'orders.viewAny',    'orders.view',
-            'notifications.viewAny', 'notifications.view',
+            'samples.access',
+            'samples.approve',
+            'samples.reject',
+            'results.access',
+            'reactivos.access',
+            'patients.access',
+            'orders.access',
+            'notifications.access',
         ])->get());
 
-        // Médico: consulta pacientes, crea/ve órdenes y lee resultados
+        // Tecnólogo de Imagen: imagen + los mismos accesos “transversales” que el Bioquímico
+        // (pacientes, órdenes, notificaciones), más catálogo para mantener exámenes de imagen.
+        // No incluye muestras / resultados / reactivos (solo laboratorio).
+        $tecnologoImagen->syncPermissions(Permission::whereIn('name', [
+            'imaging.access',
+            'imaging.approve',
+            'patients.access',
+            'orders.access',
+            'catalog.access',
+            'notifications.access',
+        ])->get());
+
+        // Usuarios que ya tenían el rol: asegurar permisos directos nuevos (el panel usa hasDirectPermission).
+        $tecnologoDirect = Permission::whereIn('name', [
+            'patients.access',
+            'orders.access',
+            'catalog.access',
+            'notifications.access',
+            'imaging.access',
+            'imaging.approve',
+        ])->get();
+        foreach (User::role('Tecnólogo de Imagen')->cursor() as $user) {
+            if ($tecnologoDirect->isNotEmpty()) {
+                $user->givePermissionTo($tecnologoDirect);
+            }
+        }
+
+        // Médico: pacientes, órdenes (crea y consulta), resultados, notificaciones
         $medico->syncPermissions(Permission::whereIn('name', [
-            'patients.viewAny', 'patients.view',
-            'orders.viewAny',   'orders.view',   'orders.create',
-            'results.viewAny',  'results.view',
-            'notifications.viewAny', 'notifications.view',
+            'patients.access',
+            'orders.access',
+            'results.access',
+            'notifications.access',
         ])->get());
 
-        // Paciente: solo ver sus propios resultados (la Policy filtra por ID)
+        // Paciente: solo consulta sus propios resultados (la Policy filtra por ID)
         $paciente->syncPermissions(Permission::whereIn('name', [
-            'results.view',
+            'results.access',
         ])->get());
 
         // ─── 4. CREAR USUARIO ADMINISTRADOR POR DEFECTO ───────────────────────
         $adminUser = User::firstOrCreate(
             ['email' => 'admin@clinicanorte.com'],
             [
-                'name'              => 'Administrador del Sistema',
-                'password'          => Hash::make('Admin@2026!'),
+                'name' => 'Administrador del Sistema',
+                'password' => Hash::make('Admin@2026!'),
                 'email_verified_at' => now(),
             ]
         );
         $adminUser->syncRoles([$admin]);
-        // El admin también recibe permisos DIRECTOS para que hasDirectPermission() funcione.
-        // Solo el admin tiene permisos directos automáticos. El resto de usuarios
-        // solo reciben permisos directos a través de los toggles de módulo.
+
+        // El admin recibe TODOS los permisos directamente, además de por rol,
+        // para que hasPermissionTo() resuelva sin depender del rol.
         $adminUser->syncPermissions(Permission::all());
 
         // Limpiar caché nuevamente al finalizar
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $this->command->info('✅ Roles y permisos creados correctamente.');
+        $this->command->info('✅ Roles y permisos (basados en módulos) creados correctamente.');
         $this->command->info('👤 Admin: admin@clinicanorte.com / Admin@2026!');
     }
 }

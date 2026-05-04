@@ -9,27 +9,27 @@ class PermissionPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->can('permissions.viewAny');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function view(User $user, Permission $model): bool
     {
-        return $user->can('permissions.view');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function create(User $user): bool
     {
-        return $user->can('permissions.create');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function update(User $user, Permission $model): bool
     {
-        return $user->can('permissions.update');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function delete(User $user, Permission $model): bool
     {
-        return $user->can('permissions.delete');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function forceDelete(User $user, Permission $model): bool

@@ -15,37 +15,41 @@ class PatientResource extends Resource
 {
     protected static ?string $model = Patient::class;
 
-    protected static ?string $navigationIcon  = 'heroicon-o-user-group';
+    protected static ?string $navigationIcon = 'heroicon-o-user-group';
+
     protected static ?string $navigationGroup = 'Pacientes';
-    protected static ?int    $navigationSort  = 1;
-    protected static ?string $modelLabel        = 'Paciente';
-    protected static ?string $pluralModelLabel  = 'Pacientes';
+
+    protected static ?int $navigationSort = 1;
+
+    protected static ?string $modelLabel = 'Paciente';
+
+    protected static ?string $pluralModelLabel = 'Pacientes';
 
     // ─── Autorización ─────────────────────────────────────────────────────────
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasDirectPermission('patients.viewAny') ?? false;
+        return auth()->user()?->hasDirectPermission('patients.access') ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->hasDirectPermission('patients.create') ?? false;
+        return auth()->user()?->hasDirectPermission('patients.access') ?? false;
     }
 
     public static function canEdit($record): bool
     {
-        return auth()->user()?->hasDirectPermission('patients.update') ?? false;
+        return auth()->user()?->hasDirectPermission('patients.access') ?? false;
     }
 
     public static function canDelete($record): bool
     {
-        return auth()->user()?->hasDirectPermission('patients.delete') ?? false;
+        return auth()->user()?->hasDirectPermission('patients.access') ?? false;
     }
 
     public static function canView($record): bool
     {
-        return auth()->user()?->hasDirectPermission('patients.view') ?? false;
+        return auth()->user()?->hasDirectPermission('patients.access') ?? false;
     }
 
     // ─── Formulario ──────────────────────────────────────────────────────────
@@ -63,9 +67,9 @@ class PatientResource extends Resource
                         ->required()
                         ->unique(table: 'patients', column: 'ci', ignoreRecord: true)
                         ->validationMessages([
-                            'unique'   => 'Esta cédula de identidad ya está registrada.',
+                            'unique' => 'Esta cédula de identidad ya está registrada.',
                             'required' => 'La cédula de identidad es obligatoria.',
-                            'max'      => 'La cédula no puede tener más de :max caracteres.',
+                            'max' => 'La cédula no puede tener más de :max caracteres.',
                         ])
                         ->maxLength(20)
                         ->placeholder('Ej: 12345678')
@@ -94,8 +98,8 @@ class PatientResource extends Resource
                         ->required()
                         ->options([
                             'masculino' => 'Masculino',
-                            'femenino'  => 'Femenino',
-                            'otro'      => 'Otro',
+                            'femenino' => 'Femenino',
+                            'otro' => 'Otro',
                         ]),
                 ])
                 ->columns(2),
@@ -113,7 +117,13 @@ class PatientResource extends Resource
                     Forms\Components\TextInput::make('email')
                         ->label('Correo electrónico')
                         ->email()
-                        ->nullable()
+                        ->required()
+                        ->unique(table: 'patients', column: 'email', ignoreRecord: true)
+                        ->validationMessages([
+                            'required' => 'El correo electrónico es obligatorio para crear la cuenta del paciente.',
+                            'unique' => 'Este correo electrónico ya está registrado en otro paciente.',
+                            'email' => 'Ingrese un correo electrónico válido.',
+                        ])
                         ->maxLength(255),
 
                     Forms\Components\Textarea::make('address')
@@ -157,11 +167,11 @@ class PatientResource extends Resource
 
                 Tables\Columns\TextColumn::make('full_name')
                     ->label('Paciente')
-                    ->getStateUsing(fn (Patient $record) => $record->first_name . ' ' . $record->last_name)
+                    ->getStateUsing(fn (Patient $record) => $record->first_name.' '.$record->last_name)
                     ->searchable(query: function (Builder $query, string $search): Builder {
                         return $query->where(function ($q) use ($search) {
                             $q->where('first_name', 'ilike', "%{$search}%")
-                              ->orWhere('last_name',  'ilike', "%{$search}%");
+                                ->orWhere('last_name', 'ilike', "%{$search}%");
                         });
                     })
                     ->sortable(['last_name', 'first_name']),
@@ -173,14 +183,14 @@ class PatientResource extends Resource
 
                 Tables\Columns\TextColumn::make('age')
                     ->label('Edad')
-                    ->getStateUsing(fn (Patient $record) => $record->birth_date->age . ' años')
+                    ->getStateUsing(fn (Patient $record) => $record->birth_date->age.' años')
                     ->sortable(false),
 
                 Tables\Columns\BadgeColumn::make('gender')
                     ->label('Género')
                     ->formatStateUsing(fn (string $state) => ucfirst($state))
                     ->colors([
-                        'info'    => 'masculino',
+                        'info' => 'masculino',
                         'success' => 'femenino',
                         'warning' => 'otro',
                     ]),
@@ -217,19 +227,19 @@ class PatientResource extends Resource
                     ->label('Género')
                     ->options([
                         'masculino' => 'Masculino',
-                        'femenino'  => 'Femenino',
-                        'otro'      => 'Otro',
+                        'femenino' => 'Femenino',
+                        'otro' => 'Otro',
                     ]),
 
                 Tables\Filters\Filter::make('created_this_month')
                     ->label('Registrados este mes')
                     ->query(fn (Builder $query) => $query->whereMonth('created_at', now()->month)
-                                                         ->whereYear('created_at', now()->year)),
+                        ->whereYear('created_at', now()->year)),
 
                 Tables\Filters\Filter::make('has_history')
                     ->label('Con historial clínico')
                     ->query(fn (Builder $query) => $query->whereNotNull('medical_history_notes')
-                                                         ->where('medical_history_notes', '<>', '')),
+                        ->where('medical_history_notes', '<>', '')),
 
                 Tables\Filters\TrashedFilter::make()
                     ->label('Incluir eliminados'),
@@ -255,10 +265,10 @@ class PatientResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListPatients::route('/'),
+            'index' => Pages\ListPatients::route('/'),
             'create' => Pages\CreatePatient::route('/create'),
-            'view'   => Pages\ViewPatient::route('/{record}'),
-            'edit'   => Pages\EditPatient::route('/{record}/edit'),
+            'view' => Pages\ViewPatient::route('/{record}'),
+            'edit' => Pages\EditPatient::route('/{record}/edit'),
         ];
     }
 }

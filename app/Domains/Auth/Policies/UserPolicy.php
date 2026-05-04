@@ -8,32 +8,32 @@ class UserPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->can('users.viewAny');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function view(User $user, User $model): bool
     {
-        return $user->can('users.view');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function create(User $user): bool
     {
-        return $user->can('users.create');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function update(User $user, User $model): bool
     {
-        return $user->can('users.update');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function delete(User $user, User $model): bool
     {
-        return $user->can('users.delete');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function restore(User $user, User $model): bool
     {
-        return $user->can('users.delete');
+        return $user->hasDirectPermission('auth.access');
     }
 
     public function forceDelete(User $user, User $model): bool

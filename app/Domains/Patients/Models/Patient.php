@@ -2,8 +2,12 @@
 
 namespace App\Domains\Patients\Models;
 
+use App\Domains\Orders\Models\Order;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Patient extends Model
@@ -13,6 +17,7 @@ class Patient extends Model
     protected $table = 'patients';
 
     protected $fillable = [
+        'user_id',
         'ci',
         'first_name',
         'last_name',
@@ -43,11 +48,19 @@ class Patient extends Model
     // ── Relaciones ─────────────────────────────────────────────────────────────
 
     /**
+     * Usuario del sistema vinculado a este paciente (rol Paciente).
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
      * Preparado para Módulo 3 – Órdenes.
      * La tabla orders tendrá patient_id → patients.id
      */
-    public function orders(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function orders(): HasMany
     {
-        return $this->hasMany(\App\Domains\Orders\Models\Order::class, 'patient_id');
+        return $this->hasMany(Order::class, 'patient_id');
     }
 }

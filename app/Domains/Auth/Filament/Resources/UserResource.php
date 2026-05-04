@@ -3,14 +3,16 @@
 namespace App\Domains\Auth\Filament\Resources;
 
 use App\Domains\Auth\Filament\Resources\UserResource\Pages;
+use App\Domains\Auth\Models\Role;
 use App\Domains\Auth\Traits\HasModulePermissions;
 use App\Models\User;
-use Closure;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
 
 class UserResource extends Resource
@@ -20,36 +22,47 @@ class UserResource extends Resource
     protected static ?string $model = User::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
+
     protected static ?string $navigationGroup = 'Administración';
-    protected static ?int    $navigationSort  = 1;
-    protected static ?string $modelLabel        = 'Usuario';
-    protected static ?string $pluralModelLabel  = 'Usuarios';
+
+    protected static ?int $navigationSort = 1;
+
+    protected static ?string $modelLabel = 'Usuario del Sistema';
+
+    protected static ?string $pluralModelLabel = 'Usuarios del Sistema';
+
+    // ─── Scope: solo personal clínico (sin pacientes) ─────────────────────────
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->whereDoesntHave('patient');
+    }
 
     // ─── Autorización ─────────────────────────────────────────────────────────
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasDirectPermission('users.viewAny') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->hasDirectPermission('users.create') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canEdit($record): bool
     {
-        return auth()->user()?->hasDirectPermission('users.update') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canDelete($record): bool
     {
-        return auth()->user()?->hasDirectPermission('users.delete') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canView($record): bool
     {
-        return auth()->user()?->hasDirectPermission('users.view') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     // ─── Formulario ──────────────────────────────────────────────────────────
@@ -79,8 +92,7 @@ class UserResource extends Resource
                         ->password()
                         ->revealable()
                         ->helperText('Mínimo 8 caracteres y máximo 12: mayúsculas, minúsculas, números y símbolos.')
-                        ->dehydrateStateUsing(fn (?string $state): ?string =>
-                            filled($state) ? Hash::make($state) : null
+                        ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? Hash::make($state) : null
                         )
                         ->dehydrated(fn (?string $state): bool => filled($state))
                         ->required(fn (string $operation): bool => $operation === 'create')
@@ -92,11 +104,11 @@ class UserResource extends Resource
                             'regex:/[\W_]/',
                         ])
                         ->validationMessages([
-                            'min_length'  => 'La contraseña debe tener al menos 8 caracteres.',
-                            'min'         => 'La contraseña debe tener al menos 8 caracteres.',
-                            'max_length'  => 'La contraseña no puede superar los 12 caracteres.',
-                            'max'         => 'La contraseña no puede superar los 12 caracteres.',
-                            'regex'       => 'La contraseña debe contener al menos una mayúscula, una minúscula, un número y un símbolo especial.',
+                            'min_length' => 'La contraseña debe tener al menos 8 caracteres.',
+                            'min' => 'La contraseña debe tener al menos 8 caracteres.',
+                            'max_length' => 'La contraseña no puede superar los 12 caracteres.',
+                            'max' => 'La contraseña no puede superar los 12 caracteres.',
+                            'regex' => 'La contraseña debe contener al menos una mayúscula, una minúscula, un número y un símbolo especial.',
                         ])
                         ->maxLength(12),
 
@@ -113,45 +125,39 @@ class UserResource extends Resource
             // ── Rol del usuario ───────────────────────────────────────────────
             Forms\Components\Section::make('Rol del Usuario')
                 ->icon('heroicon-o-shield-check')
-                ->description('El rol define el conjunto base de permisos. Los permisos por módulo (abajo) son adicionales y exclusivos para este usuario.')
+                ->description('El rol define el conjunto base de permisos del usuario. Los permisos por módulo (abajo) son adicionales y exclusivos para este usuario.')
                 ->schema([
-                    Forms\Components\Select::make('roles')
-                        ->label('Roles asignados')
-                        ->multiple()
-                        ->relationship('roles', 'name')
-                        ->preload()
+                    Forms\Components\Select::make('role_id')
+                        ->label('Rol asignado')
+                        ->options(
+                            Role::whereNotIn('name', ['Paciente'])
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                        )
                         ->searchable()
+                        ->native(false)
                         ->live()
                         ->required()
+                        ->dehydrated(false)
                         ->validationMessages([
-                            'required' => 'Debe asignar al menos un rol al usuario.',
+                            'required' => 'Debe asignar un rol al usuario.',
                         ])
-                        ->rules([
-                            fn (): Closure => function (string $attribute, mixed $value, Closure $fail) {
-                                if (empty($value)) {
-                                    $fail('Debe asignar al menos un rol al usuario.');
-                                }
-                            },
-                        ])
-                        ->afterStateUpdated(function (?array $state, \Filament\Forms\Set $set) {
-                            // Al cambiar el rol, auto-rellena los toggles con los permisos
-                            // por defecto de ese rol como punto de partida para el admin.
-                            if (empty($state)) {
+                        ->afterStateUpdated(function (int|string|null $state, Set $set) {
+                            if (! $state) {
                                 foreach (array_keys(static::moduleDefinitions()) as $moduleKey) {
                                     $set("module_{$moduleKey}", false);
                                 }
+
                                 return;
                             }
-                            $rolePermissions = \App\Domains\Auth\Models\Role::whereIn('id', $state)
-                                ->with('permissions')
-                                ->get()
-                                ->flatMap(fn ($role) => $role->permissions->pluck('name'))
-                                ->unique();
+                            $role = Role::with('permissions')->find($state);
+                            if (! $role) {
+                                return;
+                            }
+                            $rolePermissions = $role->permissions->pluck('name');
                             foreach (array_keys(static::moduleDefinitions()) as $moduleKey) {
-                                $names = static::modulePermissionNames($moduleKey);
-                                $set("module_{$moduleKey}", $rolePermissions->contains(
-                                    fn ($p) => in_array($p, $names)
-                                ));
+                                $permName = static::modulePermissionName($moduleKey);
+                                $set("module_{$moduleKey}", $rolePermissions->contains($permName));
                             }
                         }),
                 ])
@@ -187,10 +193,9 @@ class UserResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('roles.name')
-                    ->label('Roles')
+                    ->label('Rol')
                     ->badge()
-                    ->color('primary')
-                    ->separator(', '),
+                    ->color('primary'),
 
                 Tables\Columns\IconColumn::make('email_verified_at')
                     ->label('Verificado')
@@ -234,9 +239,9 @@ class UserResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListUsers::route('/'),
+            'index' => Pages\ListUsers::route('/'),
             'create' => Pages\CreateUser::route('/create'),
-            'edit'   => Pages\EditUser::route('/{record}/edit'),
+            'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
     }
 }

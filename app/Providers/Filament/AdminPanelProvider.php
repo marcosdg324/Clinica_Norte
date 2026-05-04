@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Domains\Auth\Filament\Pages\Login;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -11,7 +12,6 @@ use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Widgets;
-use App\Domains\Auth\Filament\Pages\Login;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -52,6 +52,16 @@ class AdminPanelProvider extends PanelProvider
                 in: app_path('Domains/Samples/Filament/Resources'),
                 for: 'App\\Domains\\Samples\\Filament\\Resources'
             )
+            // Recursos del dominio Imaging (Módulo 5)
+            ->discoverResources(
+                in: app_path('Domains/Imaging/Filament/Resources'),
+                for: 'App\\Domains\\Imaging\\Filament\\Resources'
+            )
+            // Recursos del dominio Catalog
+            ->discoverResources(
+                in: app_path('Domains/Catalog/Filament/Resources'),
+                for: 'App\\Domains\\Catalog\\Filament\\Resources'
+            )
             // Recursos generales (para módulos futuros)
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
@@ -79,4 +89,3 @@ class AdminPanelProvider extends PanelProvider
             ]);
     }
 }
-

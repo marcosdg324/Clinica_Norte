@@ -12,35 +12,38 @@ use Filament\Tables\Table;
 
 class RoleResource extends Resource
 {
-
     protected static ?string $model = Role::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
+
     protected static ?string $navigationGroup = 'Administración';
-    protected static ?int    $navigationSort  = 2;
-    protected static ?string $modelLabel        = 'Rol';
-    protected static ?string $pluralModelLabel  = 'Roles';
+
+    protected static ?int $navigationSort = 2;
+
+    protected static ?string $modelLabel = 'Rol';
+
+    protected static ?string $pluralModelLabel = 'Roles';
 
     // ─── Autorización ─────────────────────────────────────────────────────────
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->hasDirectPermission('roles.viewAny') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canCreate(): bool
     {
-        return auth()->user()?->hasDirectPermission('roles.create') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canEdit($record): bool
     {
-        return auth()->user()?->hasDirectPermission('roles.update') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     public static function canDelete($record): bool
     {
-        return auth()->user()?->hasDirectPermission('roles.delete') ?? false;
+        return auth()->user()?->hasDirectPermission('auth.access') ?? false;
     }
 
     // ─── Formulario ──────────────────────────────────────────────────────────
@@ -108,9 +111,9 @@ class RoleResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListRoles::route('/'),
+            'index' => Pages\ListRoles::route('/'),
             'create' => Pages\CreateRole::route('/create'),
-            'edit'   => Pages\EditRole::route('/{record}/edit'),
+            'edit' => Pages\EditRole::route('/{record}/edit'),
         ];
     }
 }

@@ -9,32 +9,32 @@ class PatientPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->hasDirectPermission('patients.viewAny');
+        return $user->hasDirectPermission('patients.access');
     }
 
     public function view(User $user, Patient $patient): bool
     {
-        return $user->hasDirectPermission('patients.view');
+        return $user->hasDirectPermission('patients.access');
     }
 
     public function create(User $user): bool
     {
-        return $user->hasDirectPermission('patients.create');
+        return $user->hasDirectPermission('patients.access');
     }
 
     public function update(User $user, Patient $patient): bool
     {
-        return $user->hasDirectPermission('patients.update');
+        return $user->hasDirectPermission('patients.access');
     }
 
     public function delete(User $user, Patient $patient): bool
     {
-        return $user->hasDirectPermission('patients.delete');
+        return $user->hasDirectPermission('patients.access');
     }
 
     public function restore(User $user, Patient $patient): bool
     {
-        return $user->hasDirectPermission('patients.delete');
+        return $user->hasDirectPermission('patients.access');
     }
 
     public function forceDelete(User $user, Patient $patient): bool
